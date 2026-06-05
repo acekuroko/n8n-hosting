@@ -1,7 +1,49 @@
-version: "3.8"
+volumes:
+  db_storage:
+  n8n_storage:
+  redis_storage:
+
+x-shared: &shared
+  restart: always
+  image: docker.n8n.io/n8nio/n8n:${N8N_VERSION}
+  environment:
+    - DB_TYPE=postgresdb
+    - DB_POSTGRESDB_HOST=postgres
+    - DB_POSTGRESDB_PORT=5432
+    - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+    - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
+    - EXECUTIONS_MODE=queue
+    - QUEUE_BULL_REDIS_HOST=redis
+    - QUEUE_HEALTH_CHECK_ACTIVE=true
+    - N8N_ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    - N8N_RUNNERS_MODE=external
+    - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
+    - N8N_RUNNERS_BROKER_LISTEN_ADDRESS=0.0.0.0
+    - OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS=true
+    # --- ADDED: NPM, Raspberry Pi & Secure Cookie Fixes ---
+    #- N8N_SECURE_COOKIE=false
+    - N8N_PROTOCOL=https
+    - N8N_HOST=raspberrypi.local
+    - WEBHOOK_URL=https://raspberrypi.local:7443/
+    - N8N_EDITOR_BASE_URL=https://raspberrypi.local:7443/
+  volumes:
+    - n8n_storage:/home/node/.n8n
+  depends_on:
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+x-runner: &runner
+  restart: always
+  image: n8nio/runners:${N8N_VERSION}
+  environment:
+    - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
+
 services:
   postgres:
-    image: postgres:11
+    image: postgres:16
     restart: always
     environment:
       - POSTGRES_USER
@@ -10,61 +52,62 @@ services:
       - POSTGRES_NON_ROOT_USER
       - POSTGRES_NON_ROOT_PASSWORD
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - db_storage:/var/lib/postgresql/data
       - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:6-alpine
+    restart: always
+    volumes:
+      - redis_storage:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n
-    restart: always
-    environment:
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=postgres
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
-      - DB_POSTGRESDB_USER=${POSTGRES_USER}
-      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
-      # --- Required Nginx Proxy / HTTPS Config ---
-      # --- Updated Local Nginx Proxy Config ---
-      - N8N_PROTOCOL=https
-      - N8N_HOST=raspberrypi.local # Or your Pi's static IP (e.g., 192.168.1.50)
-      - WEBHOOK_URL=http://raspberrypi.local:7443/
-      - N8N_EDITOR_BASE_URL=http://raspberrypi.local:7443/
-      #- N8N_SECURE_COOKIE=false # CRITICAL: Fixes the Safari error when using HTTP
-    # Port 5678 is removed from host mapping because NPM will route traffic internally
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - default # Keeps connection to postgres
-      - npm_network # Allows NPM to reach this container
-
-  n8n-worker:
-    image: docker.n8n.io/n8nio/n8n
-    restart: always
-    command: worker
-    environment:
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=postgres
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
-      - DB_POSTGRESDB_USER=${POSTGRES_USER}
-      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
-      - WEBHOOK_URL=https://raspberrypi.local:7443/
-    depends_on:
-      postgres:
-        condition: service_healthy
+    <<: *shared
+    # --- REMOVED: - 5678:5678 (Nginx Proxy Manager handles the ports now) ---
     networks:
       - default
       - npm_network
 
-volumes:
-  postgres_data:
+  n8n-runner:
+    <<: *runner
+    environment:
+      - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
+      - N8N_RUNNERS_TASK_BROKER_URI=http://n8n:5679
+    depends_on:
+      - n8n
 
+  n8n-worker:
+    <<: *shared
+    command: worker
+    depends_on:
+      - n8n
+    networks:
+      - default
+      - npm_network
+
+  n8n-worker-runner:
+    <<: *runner
+    environment:
+      - N8N_RUNNERS_AUTH_TOKEN=${RUNNERS_AUTH_TOKEN}
+      - N8N_RUNNERS_TASK_BROKER_URI=http://n8n-worker:5679
+    depends_on:
+      - n8n-worker
+
+# --- ADDED: Define the external network to talk to Nginx Proxy Manager ---
 networks:
   npm_network:
     external: true
