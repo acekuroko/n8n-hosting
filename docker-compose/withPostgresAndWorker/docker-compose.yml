@@ -30,11 +30,11 @@ services:
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       # --- Required Nginx Proxy / HTTPS Config ---
       # --- Updated Local Nginx Proxy Config ---
-      - N8N_PROTOCOL=http
+      - N8N_PROTOCOL=https
       - N8N_HOST=raspberrypi.local # Or your Pi's static IP (e.g., 192.168.1.50)
-      - WEBHOOK_URL=http://raspberrypi.local:8083/
-      - N8N_EDITOR_BASE_URL=http://raspberrypi.local:8083/
-      - N8N_SECURE_COOKIE=false # CRITICAL: Fixes the Safari error when using HTTP
+      - WEBHOOK_URL=http://raspberrypi.local:7443/
+      - N8N_EDITOR_BASE_URL=http://raspberrypi.local:7443/
+      #- N8N_SECURE_COOKIE=false # CRITICAL: Fixes the Safari error when using HTTP
     # Port 5678 is removed from host mapping because NPM will route traffic internally
     depends_on:
       postgres:
@@ -54,7 +54,7 @@ services:
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
-      - WEBHOOK_URL=https://raspberrypi.local:8083/
+      - WEBHOOK_URL=https://raspberrypi.local:7443/
     depends_on:
       postgres:
         condition: service_healthy
