@@ -31,8 +31,8 @@ services:
       # --- Required Nginx Proxy / HTTPS Config ---
       - N8N_PROTOCOL=https
       - N8N_HOST=raspberrypi.local
-      - WEBHOOK_URL=https://raspberrypi.local:8443/
-      - N8N_EDITOR_BASE_URL=https://raspberrypi.local:8443/
+      - WEBHOOK_URL=https://raspberrypi.local:7443/
+      - N8N_EDITOR_BASE_URL=https://raspberrypi.local:7443/
     # Port 5678 is removed from host mapping because NPM will route traffic internally
     depends_on:
       postgres:
@@ -52,7 +52,7 @@ services:
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
-      - WEBHOOK_URL=https://raspberrypi.local:8443/
+      - WEBHOOK_URL=https://raspberrypi.local:7443/
     depends_on:
       postgres:
         condition: service_healthy
