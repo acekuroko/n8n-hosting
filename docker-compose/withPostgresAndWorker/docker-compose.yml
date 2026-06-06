@@ -25,8 +25,8 @@ x-shared: &shared
     #- N8N_SECURE_COOKIE=false
     - N8N_PROTOCOL=https
     - N8N_HOST=raspberrypi.local
-    - WEBHOOK_URL=https://raspberrypi.local:7443/
-    - N8N_EDITOR_BASE_URL=https://raspberrypi.local:7443/
+    - WEBHOOK_URL=https://localhost:7443/
+    - N8N_EDITOR_BASE_URL=https://localhost:7443/
   volumes:
     - n8n_storage:/home/node/.n8n
   depends_on:
@@ -43,7 +43,10 @@ x-runner: &runner
 
 services:
   postgres:
-    image: postgres:16
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres-init
+    image: postgres-init:16
     restart: always
     environment:
       - POSTGRES_USER
@@ -53,16 +56,16 @@ services:
       - POSTGRES_NON_ROOT_PASSWORD
     volumes:
       - db_storage:/var/lib/postgresql/data
-      - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+          "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB} || exit 1",
         ]
-      interval: 5s
+      interval: 15s
       timeout: 5s
-      retries: 10
+      retries: 30
+      start_period: 120s
 
   redis:
     image: redis:6-alpine
